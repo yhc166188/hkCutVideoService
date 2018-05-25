@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/cutvideoserivce">
+        <file>res/arguse2.png</file>
+    </qresource>
+</RCC>
