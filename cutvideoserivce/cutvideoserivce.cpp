@@ -3,6 +3,7 @@
 #include <QAction>
 #include <QMenu>
 #include "VideoCaptrue.h"
+#include <windows.h>
 cutvideoserivce::cutvideoserivce(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -20,6 +21,4 @@ cutvideoserivce::cutvideoserivce(QWidget *parent)
     trayMenu->addAction(exit);
     trayIcon->setContextMenu(trayMenu);
     trayIcon->show();
-
-
 }

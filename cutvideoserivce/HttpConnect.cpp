@@ -36,16 +36,16 @@ int CHttpConnect::socketInit(string host, int num)
     server = gethostbyname(host.c_str());
     memcpy((char *)&address.sin_addr.s_addr, (char*)server->h_addr, server->h_length);
     //EV_PERSIST
+    if (-1 == connect(sockfd, (struct sockaddr *)&address, sizeof(address))) {
+        DBG << "connection error!" << endl;
+        return -1;
+    }
     //设置非阻塞
     unsigned long ul = 1;
     int iret = ioctlsocket(sockfd, FIONBIO, (unsigned long *)&ul);//设置成非阻塞模式。
     if (iret == SOCKET_ERROR)//设置失败。
     {
         Log::instance().p(YLOG_INFO, "socket:%d,设置非阻塞失败", sockfd);
-    }
-    if (-1 == connect(sockfd, (struct sockaddr *)&address, sizeof(address))) {
-        DBG << "connection error!" << endl;
-        return -1;
     }
     Log::instance().p(YLOG_INFO, "num:%d,socket:%d,创建socket成功",num, sockfd);
     return sockfd;

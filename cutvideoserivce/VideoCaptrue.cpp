@@ -2,26 +2,27 @@
 #include "ISMSSDK.h"
 #include "crash/CrashAPI.h"
 #include <QtCore/QtCore>
-#include <QMessageBox>
 #include <QList>
-#include <QLabel>
 #include <tuple>
 #include <QFile>
 #include <windows.h>
 #include <log.h>
 #include <chrono>
+#include <utility>
+#include <QDir>
 #include "settingconfig.h"
 #include "HttpConnect.h"
+#include "defaultsetting.h"
 #define PAGE_SIZE_REQ 400
 QMutex _mtx;
 volatile int curScreenshotIndex = 0;
 volatile bool threadrun = true;
 volatile int capturenum = 0;
 volatile int loginstatus = 0; //
+volatile bool testthreadflg = false;
 QMutex capturemtx;
 QMutex loginMutex;
-int  socketd[2] = { -1 };
-#include <QDir>
+int  socketd[10] = { -1 };
 static bool isDirExist(QString fullPath)
 {
     QDir dir(fullPath);
@@ -42,6 +43,8 @@ static int64_t ot() {
 }
 static QString m_SnapFolder;
 static CHttpConnect *s_http = nullptr;
+using cameradata = std::tuple<QString,QString,int>;
+static QList<cameradata> cameraNodeList;
 static QList<std::tuple<QString, QString>> camerainfo({  //监控点编号uuid ,名字
 std::make_tuple("",u8"北小吃区餐厅"),
 std::make_tuple("",u8"北杭州味道通道"),
@@ -75,7 +78,65 @@ VideoCaptrue::VideoCaptrue()
 VideoCaptrue::~VideoCaptrue()
 {
 }
+bool VideoCaptrue::CamerainfoInit()
+{
+    int arraysize = Setting::getInstance()->getSetting()->beginReadArray("camera");
+    if (arraysize <= 0)
+    {
+        Setting::getInstance()->getSetting()->endArray();
+        Setting::getInstance()->getSetting()->beginWriteArray("camera");
+        for (int i = 0; i < 1; ++i) {
+            Setting::getInstance()->getSetting()->setArrayIndex(i);
+            Setting::getInstance()->getSetting()->setValue("uuid", defaultSetting::camerainfo[i][0]);
+            Setting::getInstance()->getSetting()->setValue("name", defaultSetting::camerainfo[i][1]);
+            Setting::getInstance()->getSetting()->setValue("tcpvalue", defaultSetting::camerainfo[i][2]);
+        }       
+    }
+    Setting::getInstance()->getSetting()->endArray();
+    arraysize = Setting::getInstance()->getSetting()->beginReadArray("camera");
+    for (int i = 0; i < arraysize; ++i) {
+        cameradata  data;
+        Setting::getInstance()->getSetting()->setArrayIndex(i);
+        std::get<0>(data) = Setting::getInstance()->getSetting()->value("uuid").toString();
+        std::get<1>(data) = Setting::getInstance()->getSetting()->value("name").toString();
+        std::get<2>(data) = Setting::getInstance()->getSetting()->value("tcpvalue").toInt();
+        cameraNodeList.push_back(data);
+    }
+    Setting::getInstance()->getSetting()->endArray();
+    if (s_http)
+    {
+        closesocket(socketd[0]);
+        closesocket(socketd[1]);
+        delete s_http;
+    }
+    s_http = new CHttpConnect();
+    socketd[0] = s_http->socketInit("127.0.0.1", 0);
+    socketd[1] = s_http->socketInit("127.0.0.1", 1);
+    socketd[2] = s_http->socketInit("127.0.0.1", 2);
+    socketd[3] = s_http->socketInit("127.0.0.1", 3);
 
+    m_SnapFolder = Setting::getInstance()->getSetting()->value("basic/picpath").toString();
+    for (int i = 0; i < cameraNodeList.size(); i++)
+    {
+        QString detailpath = m_SnapFolder + "\\" + QString::number(i + 1);
+        isDirExist(detailpath);
+    }
+
+    int runtime = Setting::getInstance()->getSetting()->value("basic/runtime").toInt();
+    if (runtime > 0)
+    {
+        testthreadflg = true;
+        QString path = m_SnapFolder + "\\test";
+        isDirExist(path);
+        Log::instance().p(YLOG_INFO, "测试保存图片路径为：%s", path.toStdString().c_str());
+    }
+    else
+    {
+        Log::instance().p(YLOG_INFO, "保存图片路径为：%s", m_SnapFolder.toStdString().c_str());
+        testthreadflg = false;
+    }
+    return true;
+}
 bool VideoCaptrue::Logininit()
 {
     Logindestroy();
@@ -87,34 +148,26 @@ bool VideoCaptrue::Logininit()
     iRet = ISMS_Init();
     if (iRet != 0)
     {
-        //QMessageBox::about(NULL, QStringLiteral("错误"), QStringLiteral("初始化失败 请查看日志"));
         Log::instance().p(YLOG_ERROR, "初始化失败 错误码：%d", ISMS_GetLastError());
         return false;
     }
     loginstatus = 2;
-    std::string strip = Setting::getInstance()->getSetting()->value("ip").toString().toStdString();
-    int port = Setting::getInstance()->getSetting()->value("port").toInt();
-    std::string strusername = Setting::getInstance()->getSetting()->value("username").toString().toStdString();
-    std::string strpassword = Setting::getInstance()->getSetting()->value("password").toString().toStdString();
+    std::string strip = Setting::getInstance()->getSetting()->value("basic/ip").toString().toStdString();
+    int port = Setting::getInstance()->getSetting()->value("basic/port").toInt();
+    std::string strusername = Setting::getInstance()->getSetting()->value("basic/username").toString().toStdString();
+    std::string strpassword = Setting::getInstance()->getSetting()->value("basic/password").toString().toStdString();
     reslut = ISMS_Login(strip.c_str(), port, strusername.c_str(), strpassword.c_str());
     if (reslut == -1)
     {
-        //QMessageBox::about(NULL, QStringLiteral("错误"), QStringLiteral("登录失败 请查看日志"));
         Log::instance().p(YLOG_ERROR, "登录失败,ip:%s,port:%d,user:%s,password:%s 错误码：%d",strip.c_str(),port,strusername.c_str(),strpassword.c_str(), ISMS_GetLastError());
         return false;
     }
     else
     {
-        Log::instance().p(YLOG_ERROR, "登录成功 ,ip:%s,port:%d,user:%s,password:%s", strip.c_str(), port, strusername.c_str(), strpassword.c_str(), ISMS_GetLastError());        
+        Log::instance().p(YLOG_INFO, "登录成功 ,ip:%s,port:%d,user:%s,password:%s", strip.c_str(), port, strusername.c_str(), strpassword.c_str(), ISMS_GetLastError());        
     }
     loginstatus = 3;
-    QString picpath = Setting::getInstance()->getSetting()->value("picpath").toString();
-    for (int i = 1; i <= camerainfo.size(); i++)
-    {
-        QString path = picpath + "\\" + QString::number(i);
-        isDirExist(path);
-    }
-    Log::instance().p(YLOG_INFO, "保存图片路径为：%s", picpath.toStdString().c_str());
+
     return true;
 }
 bool VideoCaptrue::CameraInit()
@@ -124,7 +177,7 @@ bool VideoCaptrue::CameraInit()
     PISMS_CAMERA pCameraArray = new (std::nothrow) ISMS_CAMERA[PAGE_SIZE_REQ];
     if (NULL == pCameraArray)
     {
-        QMessageBox::about(NULL, QStringLiteral("错误"), QStringLiteral(" ISMS_CAMERA分配内存失败"));
+        Log::instance().p(YLOG_ERROR, "ISMS_CAMERA 分配内存失败");
         return false;
     }
     while (true)
@@ -137,14 +190,12 @@ bool VideoCaptrue::CameraInit()
         int iRet = ISMS_GetCameraInfo(&stReq, &stRsp, pCameraArray);
         if (iRet != ISMS_ERR_NOERROR)
         {
-            QMessageBox::about(NULL, QStringLiteral("错误"), QStringLiteral("全量获取监控点信息出错!，错误码:%1").arg(ISMS_GetLastError()));
+            Log::instance().p(YLOG_ERROR, "全量获取监控点信息出错!，错误码:%d", ISMS_GetLastError());
             delete[] pCameraArray;
             return false;
         }
-
         if (0 == stRsp.iRealRows)
             break;
-
         if (1 == iPage)
         {
             i64Time = stRsp.iUpdateTime;
@@ -164,53 +215,55 @@ bool VideoCaptrue::CameraInit()
                 if (std::get<1>(camerainfo[j]) == pCameraArray[i].szCameraName)
                 {
                     std::get<0>(camerainfo[j]) = pCameraArray[i].szCameraUuid;
-                    Log::instance().p(YLOG_INFO, "监控点：%s,uuid:%s", pCameraArray[i].szCameraName, pCameraArray[i].szCameraUuid);
-                }
-                    
+                    Log::instance().p(YLOG_INFO, "匹配监控点：%s,uuid:%s", pCameraArray[i].szCameraName, pCameraArray[i].szCameraUuid);
+                }                    
             }
             Log::instance().p(YLOG_INFO, "序号：%d监控点：%s,uuid:%s",i, pCameraArray[i].szCameraName, pCameraArray[i].szCameraUuid);
         }       
         ++iPage;
     }
     delete[] pCameraArray;
-    if (s_http)
-    {
-        delete s_http;
-    }
-    s_http = new CHttpConnect();
-    socketd[0] = s_http->socketInit("127.0.0.1",0);
-    socketd[1] = s_http->socketInit("127.0.0.1", 1);
-    //m_SnapFolder = "E:\\work\\0";
-    //m_SnapFolder = m_SnapFolder+ "\\example.jpg";
-    //QFile::remove(m_SnapFolder);
-    //Log::instance().p(YLOG_INFO, "保存日志路径为：%s", m_SnapFolder.toStdString().c_str());
     return true;
 }
 
 void VideoCaptrue::PreviewScrennshot()
 {
     int curindex = 0;
-    QString path = "E:\\work\\0";//
-    std::string  imagename;
-    _mtx.lock();
-    if (curScreenshotIndex >= 2000)
-        curScreenshotIndex = 0;
-    curindex = curScreenshotIndex;
-    curScreenshotIndex++;
-    imagename = "example" + std::to_string(curindex) + ".jpg";
-    path = path + "\\" + imagename.c_str();
-    QFile::remove(path);
-    //if (std::get<0>(camerainfo[curindex]).isEmpty())
-    //{
-    //    Log::instance().p(YLOG_ERROR, "cameraindex:%d,调用线程ID为：%d", curindex,  QThread::currentThread());
-    //}
-    _mtx.unlock();
+    QString path;//
     ISMS_STREAM_TYPE_EN enStreamType = TYPE_MAIN_STREAM;
     auto CB_StreamCallback = [](long lPlayHnadle, ISMS_STREAM_DATA_TYPE_EN enStreamDataType, const char* pDataArray, int iDataLen, void* pUserData) -> void __stdcall {
     
     };
-    int64_t starttime = ot();
-    long lPlayHandle = ISMS_StartPreview("9d36ed060ad047b29b080f7f5ce9cf89", nullptr, enStreamType, CB_StreamCallback, NULL);
+    std::string  imagename;
+    _mtx.lock();
+    if (testthreadflg)
+    {
+        if (curScreenshotIndex >= 2000)
+            curScreenshotIndex = 0;
+        curindex = curScreenshotIndex%cameraNodeList.size();
+
+        imagename = "test\\example" + std::to_string(curScreenshotIndex) + ".jpg";
+        path = m_SnapFolder + "\\" + imagename.c_str();
+    }
+    else
+    {
+        if (curScreenshotIndex >= cameraNodeList.size())
+            curScreenshotIndex = 0;
+        curindex = curScreenshotIndex;
+        imagename = std::to_string(curindex + 1) + "\\example.jpg";
+        path = m_SnapFolder + "\\" + imagename.c_str();
+    }
+    curScreenshotIndex++;
+    _mtx.unlock();
+    QString uuid(std::get<0>(cameraNodeList[curindex]));
+    if (curindex >= cameraNodeList.size() || uuid.isEmpty())
+    {        
+        //Log::instance().p(YLOG_ERROR, "cameraindex:%d,调用线程ID为：%d,%d,%s", curindex, QThread::currentThread(), cameraNodeList.size());
+        return;
+       // 
+    }
+    int64_t starttime = ot(); //"9d36ed060ad047b29b080f7f5ce9cf89"
+    long lPlayHandle = ISMS_StartPreview(uuid.toStdString().c_str(), nullptr, enStreamType, CB_StreamCallback, NULL);
     bool bSuc = lPlayHandle > ISMS_ERR_FAIL;
     if (!bSuc)
     {
@@ -233,6 +286,7 @@ void VideoCaptrue::PreviewScrennshot()
     bool captureres = false;
     while (iRet == -1)
     {
+        QFile::remove(path);
         iRet = ISMS_PreviewSnapshot(lPlayHandle, path.toStdString().c_str());
         if (iRet == -1)
         {
@@ -253,9 +307,9 @@ void VideoCaptrue::PreviewScrennshot()
             break;
         }
     }
-    if (captureres)
+    if (captureres && !testthreadflg)
     {
-        QString str = QString("/num=%1").arg(curindex);
+        QString str = QString("/num=%1").arg(curindex+1);
         std::string stdstr = str.toStdString();
         //QString str1 = u8"南区监控室前停车场";
         //QString str2 = u8"北监控室前停车场";
@@ -263,39 +317,41 @@ void VideoCaptrue::PreviewScrennshot()
         //QString str4 = u8"南进口货车广场";
         //QString str5 = u8"南区机房门口";
         loginMutex.lock();
-        int index = 0;
-        if (std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[14])
-            || std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[2])
-            || std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[10])
-            || std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[2])
-            || std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[2]))
+        int index = std::get<2>(cameraNodeList[curindex]);
+        int iret = s_http->getData(socketd[index], stdstr, " ");
+        if (iret < 0)
         {
+            Log::instance().p(YLOG_ERROR, "tcp消息发送失败,线程id:%d，错误码：%d,index:%d ", QThread::currentThread(), iret, index);
+            closesocket(socketd[index]);
+            socketd[index] = s_http->socketInit("127.0.0.1", index);
+            s_http->getData(socketd[index], stdstr, " ");
+        }
+        //if (std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[14])
+        //    || std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[2])
+        //    || std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[10])
+        //    || std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[11])
+        //    || std::get<1>(camerainfo[curindex]) == std::get<1>(camerainfo[13]))
+        //{
 
-            index = 0;
-        }
-        else 
-        {
-            index = 1;
-        }
-        if (s_http)
-        {
-            int iret = s_http->getData(socketd[index], stdstr, " ");
-            if (iret < 0)
-            {
-                closesocket(socketd[index]);
-                socketd[index] = s_http->socketInit("127.0.0.1", 0);
-            }
-        }
+        //    index = 0;
+        //}
+        //else 
+        //{
+        //    index = 1;
+        //}
+        //if (s_http)
+        //{
+        //}
         loginMutex.unlock();
     }
     iRet = ISMS_StopPreview(lPlayHandle);
     int64_t endtime = ot();
-    if (captureres)
+    if (captureres && testthreadflg)
     {
         capturemtx.lock();
         capturenum++;
         capturemtx.unlock();
-        Log::instance().p(YLOG_INFO, "抓图成功,预览句柄：%d,当前进程id:%d ,花费时间：%dms", lPlayHandle, QThread::currentThread(), (endtime - starttime));
+        Log::instance().p(YLOG_INFO, "抓图成功,预览句柄：%d,当前进程id:%d,图片id:%d ,花费时间：%dms", lPlayHandle, QThread::currentThread(), (curindex + 1), (endtime - starttime));
 
     }
     bSuc = iRet == ISMS_ERR_NOERROR;
@@ -318,8 +374,8 @@ void VideoCaptrue::stopScreenshot()
 {
     threadrun = false;
     
-    int threadnum = Setting::getInstance()->getSetting()->value("threadnum").toInt();
-    int runtime = Setting::getInstance()->getSetting()->value("runtime").toInt();
+    int threadnum = Setting::getInstance()->getSetting()->value("basic/threadnum").toInt();
+    int runtime = Setting::getInstance()->getSetting()->value("basic/runtime").toInt();
     int time = 0;
     if (capturenum > 0 && runtime > 0)
     {
@@ -328,7 +384,6 @@ void VideoCaptrue::stopScreenshot()
     }
     closesocket(socketd[0]);
     closesocket(socketd[1]);
-    Logindestroy();
 }
 
 void VideoCaptrue::Logindestroy()
@@ -338,6 +393,6 @@ void VideoCaptrue::Logindestroy()
     if (loginstatus >= 2)
         ISMS_Fini();
     if (loginstatus >= 1)
-        CrashAPI_Uninit();
+        //CrashAPI_Uninit();
     loginstatus = 0;
 }

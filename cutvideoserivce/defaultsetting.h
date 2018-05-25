@@ -9,6 +9,10 @@ namespace defaultSetting
 		  {"password",         "admin12345" },
 		  {"threadnum",         "3"},
           {"runtime",         "-1" },
-          {"picpath",         "E:\\videocapture" },
+          {"picpath",         "C:\\Program Files (x86)\\360\\ags\\1" },
 	};
+    static char* camerainfo[][3] = {
+        { "9d36ed060ad047b29b080f7f5ce9cf89" ,      u8"Camera 01" ,"1"},
+       //{ "9d36ed060ad047b29b080f7f5ce9cf89",       u8"北杭州味道通道" ,"0"},  //
+    };
 };
