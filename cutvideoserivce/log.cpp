@@ -1,8 +1,14 @@
 #include "log.h"
 //可变长string模板
 char yinfo[YLOG_MAXBUF];
-
+#include <QMutex>
+QMutex  lk;
 void Log::initLog(const int type, const int level, std::string logname/* ="" */) {
+    lk.lock();
+    if (NULL != this->file) {
+        fclose(this->file);
+        this->file = NULL;
+    }
     this->level = level;
     if (YLOG_RELEASE <= level || YLOG_MIN > level) {
         this->file = NULL;
@@ -82,13 +88,16 @@ void Log::initLog(const int type, const int level, std::string logname/* ="" */)
         }
     }
     assert(NULL != this->file);
+    lk.unlock();
 }
 
 Log::~Log() {
+    lk.lock();
     if (NULL != this->file) {
         fclose(this->file);
         this->file = NULL;
     }
+    lk.unlock();
 }
 
 void Log::p(const int level, const char* format, ...) {
@@ -114,7 +123,7 @@ void Log::p(const int level, const char* format, ...) {
         }
         SYSTEMTIME yst;
         ::GetLocalTime(&yst);
-
+        lk.lock();
         va_list args;
         va_start(args, format);
         vsprintf(yinfo, format, args);
@@ -129,6 +138,7 @@ void Log::p(const int level, const char* format, ...) {
             yst.wHour, yst.wMinute, yst.wSecond, yst.wMilliseconds,
             yinfo);
         fflush(this->file);
+        lk.unlock();
 #ifdef YLOG_SLEEP
         Sleep(YLOG_SLEEP);
 #endif

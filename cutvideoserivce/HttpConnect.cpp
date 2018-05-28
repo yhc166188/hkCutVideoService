@@ -18,7 +18,7 @@ CHttpConnect::~CHttpConnect()
 {
 
 }
-int CHttpConnect::socketInit(string host, int num)
+int CHttpConnect::socketInit(string host,int num, sockets_s &socketd)
 {
     int sockfd;
     struct sockaddr_in address;
@@ -26,18 +26,22 @@ int CHttpConnect::socketInit(string host, int num)
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     address.sin_family = AF_INET;
     if (num == 0)
-        address.sin_port = htons(6666);
+        socketd.port = 6666;
     if (num == 1)
-        address.sin_port = htons(6667);
+        socketd.port = 6667;
     if (num == 2)
-        address.sin_port = htons(6668);
+        socketd.port = 6668;
     if (num == 3)
-        address.sin_port = htons(6669);
+        socketd.port = 6669;
+    address.sin_port = htons(socketd.port);
+    socketd.socked = sockfd;
     server = gethostbyname(host.c_str());
     memcpy((char *)&address.sin_addr.s_addr, (char*)server->h_addr, server->h_length);
     //EV_PERSIST
     if (-1 == connect(sockfd, (struct sockaddr *)&address, sizeof(address))) {
-        DBG << "connection error!" << endl;
+        Log::instance().p(YLOG_INFO, "num:%d,port:%d,socket:%d,tcp连接失败", num, socketd.port, sockfd);
+        closesocket(sockfd);
+        socketd.socked = -1;
         return -1;
     }
     //设置非阻塞
@@ -45,9 +49,9 @@ int CHttpConnect::socketInit(string host, int num)
     int iret = ioctlsocket(sockfd, FIONBIO, (unsigned long *)&ul);//设置成非阻塞模式。
     if (iret == SOCKET_ERROR)//设置失败。
     {
-        Log::instance().p(YLOG_INFO, "socket:%d,设置非阻塞失败", sockfd);
+        Log::instance().p(YLOG_INFO, "port:%d,socket:%d,设置非阻塞失败", socketd.port, sockfd);
     }
-    Log::instance().p(YLOG_INFO, "num:%d,socket:%d,创建socket成功",num, sockfd);
+    Log::instance().p(YLOG_INFO, "num:%d,port:%d,socket:%d,创建socket成功",num, socketd.port, sockfd);
     return sockfd;
 }
 int CHttpConnect::socketHttp(int socket,string request)

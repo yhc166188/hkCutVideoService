@@ -5,9 +5,6 @@
 #include <QTime>
 #include "defaultsetting.h"
 #include <QFile>
-//#include <QJsonArray>
-//#include <QJsonObject>
-//#include <QJsonDocument>
 Setting *Setting::s_setting = nullptr;
 
 Setting::Setting()
