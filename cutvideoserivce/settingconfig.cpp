@@ -9,18 +9,7 @@ Setting *Setting::s_setting = nullptr;
 
 Setting::Setting()
 {
-    QString CurPath = QCoreApplication::applicationDirPath();
-    QString configINIFilePath = CurPath + "//config.ini";
-    m_settings = new QSettings(configINIFilePath, QSettings::IniFormat);
-    m_settings->setIniCodec("UTF-8"); // 让 ini 支持中文
-    QStringList defineKeys;
-    for (auto i : defaultSetting::settings)
-    {
-        QString key = QString("basic/")+i[0];
-        defineKeys.push_back(key);
-       if (!m_settings->contains(key))
-            m_settings->setValue(key, i[1]);
-    }
+    resetSetting();
 }
 
 Setting::~Setting() {
@@ -46,4 +35,26 @@ Setting *Setting::getInstance()
 void Setting::save()
 {
 	
+}
+
+void  Setting::resetSetting()
+{
+    if (m_settings)
+    {
+        delete m_settings;
+        m_settings = nullptr;
+    }
+    QString CurPath = QCoreApplication::applicationDirPath();
+    QString configINIFilePath = CurPath + "//config.ini";
+    
+    m_settings = new QSettings(configINIFilePath, QSettings::IniFormat);
+    m_settings->setIniCodec("UTF-8"); // 让 ini 支持中文
+    QStringList defineKeys;
+    for (auto i : defaultSetting::settings)
+    {
+        QString key = QString("basic/") + i[0];
+        defineKeys.push_back(key);
+        if (!m_settings->contains(key))
+            m_settings->setValue(key, i[1]);
+    }
 }

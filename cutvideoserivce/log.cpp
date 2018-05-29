@@ -131,7 +131,12 @@ void Log::p(const int level, const char* format, ...) {
         if (strlen(yinfo) > YLOG_MAXBUF) {
             strcpy(yinfo, "TOO LONG,CAN NOT LOG!");
         }
-        assert(NULL != this->file);
+        //assert(NULL != this->file);
+        if (NULL == this->file)
+        {
+            lk.unlock();
+            return;
+        }
         fprintf(this->file, "%-9.9s[%04d-%02d-%02d %02d:%02d:%02d.%03d]%s\n",
             ymess.c_str(),
             yst.wYear, yst.wMonth, yst.wDay,

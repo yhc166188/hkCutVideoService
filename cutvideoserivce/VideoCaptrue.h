@@ -11,6 +11,7 @@ public:
     static bool Logininit();
     static bool CameraInit();
     static void Logindestroy();
+    static void setThreadRunFlg(bool state);
     void PreviewScrennshot();
     static void stopScreenshot();
 protected:

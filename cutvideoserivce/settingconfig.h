@@ -8,10 +8,11 @@ class Setting
 public:
     static Setting *getInstance();
     QSettings *getSetting() { return m_settings; }
+    void  resetSetting();
     void save();
 private:
     static Setting *s_setting;
-    QSettings *m_settings;
+    QSettings *m_settings = nullptr;
 	Setting();
 	~Setting();
 };
