@@ -4,6 +4,7 @@
 #include <QMenu>
 #include "VideoCaptrue.h"
 #include <windows.h>
+#include "main.h"
 cutvideoserivce::cutvideoserivce(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -13,8 +14,8 @@ cutvideoserivce::cutvideoserivce(QWidget *parent)
     QAction* exit = new QAction(QStringLiteral("ÍË³ö"),
         trayIcon);
     connect(exit, &QAction::triggered, [this] {
-        VideoCaptrue::stopScreenshot();
         close();
+        exitCutvideoService();
     });
 
     QMenu *trayMenu = new QMenu();

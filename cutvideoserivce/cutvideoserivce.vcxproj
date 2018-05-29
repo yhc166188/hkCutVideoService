@@ -133,6 +133,7 @@
     <ClInclude Include="defaultsetting.h" />
     <ClInclude Include="HttpConnect.h" />
     <ClInclude Include="log.h" />
+    <ClInclude Include="main.h" />
     <ClInclude Include="settingconfig.h" />
     <ClInclude Include="VideoCaptrue.h" />
   </ItemGroup>

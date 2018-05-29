@@ -13,9 +13,7 @@
 #include "settingconfig.h"
 #include "HttpConnect.h"
 #include "defaultsetting.h"
-#define PAGE_SIZE_REQ 400
-#define SOCKET_SIZE   4
-#define TRY_CAPTURE_CNT 5
+#include "main.h"
 QMutex _mtx;
 volatile int curScreenshotIndex = 0;
 volatile bool threadrun = true;
@@ -286,6 +284,8 @@ void VideoCaptrue::PreviewScrennshot()
     //std::get<4>(cameraNodeList[curindex]) = ot();
     //Log::instance().p(YLOG_ERROR, "cameraindex:%d,调用线程ID为：%d,已到期可抓图uuid:%s", curindex, QThread::currentThread(), uuid.toStdString().c_str());
     //return;
+    if (!threadrun)
+        return;
     long lPlayHandle = ISMS_StartPreview(uuid.toStdString().c_str(), nullptr, enStreamType, CB_StreamCallback, NULL);
     bool bSuc = lPlayHandle > ISMS_ERR_FAIL;
     if (!bSuc)
@@ -300,7 +300,7 @@ void VideoCaptrue::PreviewScrennshot()
             }
             loginMutex.unlock();
         }
-        if(std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
+        if(threadrun && std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
             Log::instance().p(YLOG_ERROR, "当前线程%d，预览失败 uuid:%s 错误码：%d", QThread::currentThread(), uuid.toStdString().c_str(), ISMS_GetLastError());
         return;
     }
@@ -309,6 +309,8 @@ void VideoCaptrue::PreviewScrennshot()
     bool captureres = false;
     while (iRet == -1)
     {
+        if (!threadrun)
+            return;
         QFile::remove(path);
         iRet = ISMS_PreviewSnapshot(lPlayHandle, path.toStdString().c_str());
         if (iRet != -1){
@@ -327,6 +329,8 @@ void VideoCaptrue::PreviewScrennshot()
                 Log::instance().p(YLOG_ERROR, "当前线程%d，预览句柄：%d，抓图失败 错误码：%d", lPlayHandle, QThread::currentThread(), ISMS_GetLastError());
             break;
         }
+        if (!threadrun)
+            return;
     }
     if (captureres && !testthreadflg)
     {
