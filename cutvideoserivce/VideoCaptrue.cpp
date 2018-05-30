@@ -43,8 +43,18 @@ static int64_t ot() {
 }
 static QString m_SnapFolder;
 static CHttpConnect *s_http = nullptr;
-using cameradata = std::tuple<QString,QString,int,int,volatile uint64_t,volatile int>;
-static QList<cameradata> cameraNodeList;
+typedef struct camaredata_s
+{
+    QString uuid;
+    QString name;
+    int tcpvalue;
+    int frequency;
+    volatile uint64_t timestamp;
+    volatile int cnt;
+    volatile int handle;
+}camaredata_s;
+using cameradata = std::tuple<QString,QString,int,int,uint64_t,int,int>;
+static QList<camaredata_s> cameraNodeList;
 static QList<std::tuple<QString, QString>> camerainfo({  //监控点编号uuid ,名字
 std::make_tuple("",u8"北小吃区餐厅"),
 std::make_tuple("",u8"北杭州味道通道"),
@@ -100,14 +110,15 @@ bool VideoCaptrue::CamerainfoInit()
     Setting::getInstance()->getSetting()->endArray();
     arraysize = Setting::getInstance()->getSetting()->beginReadArray("camera");
     cameraNodeList.clear();
+    Log::instance().p(YLOG_INFO, "获取摄像头点位数量:%d", arraysize);
     for (int i = 0; i < arraysize; ++i) {
-        cameradata  data;
+        camaredata_s  data;
         Setting::getInstance()->getSetting()->setArrayIndex(i);
-        std::get<0>(data) = Setting::getInstance()->getSetting()->value("uuid").toString();
-        std::get<1>(data) = Setting::getInstance()->getSetting()->value("name").toString();
-        std::get<2>(data) = Setting::getInstance()->getSetting()->value("tcpvalue").toInt();
-        std::get<3>(data) = Setting::getInstance()->getSetting()->value("frequency").toInt();
-        std::get<4>(data) = 0;
+        data.uuid = Setting::getInstance()->getSetting()->value("uuid").toString();
+        data.name = Setting::getInstance()->getSetting()->value("name").toString();
+        data.tcpvalue = Setting::getInstance()->getSetting()->value("tcpvalue").toInt();
+        data.frequency = Setting::getInstance()->getSetting()->value("frequency").toInt();
+        Log::instance().p(YLOG_INFO, "camera uuid:%s,name:%s,tcpvalue:%d,frequency:%d", data.uuid.toStdString().c_str(), data.name.toStdString().c_str(), data.tcpvalue, data.frequency);
         cameraNodeList.push_back(data);
     }
     Setting::getInstance()->getSetting()->endArray();
@@ -127,11 +138,12 @@ bool VideoCaptrue::CamerainfoInit()
         
  
     m_SnapFolder = Setting::getInstance()->getSetting()->value("basic/picpath").toString();
-    for (int i = 0; i < cameraNodeList.size(); i++)
-    {
-        QString detailpath = m_SnapFolder + "\\" + QString::number(i + 1);
-        isDirExist(detailpath);
-    }
+    isDirExist(m_SnapFolder);
+    //for (int i = 0; i < cameraNodeList.size(); i++)
+    //{
+    //    QString detailpath = m_SnapFolder + "\\" + QString::number(i + 1);
+    //    isDirExist(detailpath);
+    //}
 
     int runtime = Setting::getInstance()->getSetting()->value("basic/runtime").toInt();
     if (runtime > 0)
@@ -218,7 +230,7 @@ bool VideoCaptrue::CameraInit()
                 i64Time = stRsp.iUpdateTime;
             }
         }
-        for (int i = 0; i < stRsp.iRealRows; ++i)
+/*        for (int i = 0; i < stRsp.iRealRows; ++i)
         {
             int size = camerainfo.size();
             for (int j = 0; j < size; ++j)
@@ -230,7 +242,7 @@ bool VideoCaptrue::CameraInit()
                 }                    
             }
             Log::instance().p(YLOG_INFO, "序号：%d监控点：%s,uuid:%s",i, pCameraArray[i].szCameraName, pCameraArray[i].szCameraUuid);
-        }       
+        }    */   
         ++iPage;
     }
     delete[] pCameraArray;
@@ -239,8 +251,8 @@ bool VideoCaptrue::CameraInit()
 
 void VideoCaptrue::PreviewScrennshot()
 {
-    int curindex = 0;
-    QString path;//
+    volatile int curindex = 0;
+    QString path;
     ISMS_STREAM_TYPE_EN enStreamType = TYPE_MAIN_STREAM;
     auto CB_StreamCallback = [](long lPlayHnadle, ISMS_STREAM_DATA_TYPE_EN enStreamDataType, const char* pDataArray, int iDataLen, void* pUserData) -> void __stdcall {
     
@@ -265,19 +277,18 @@ void VideoCaptrue::PreviewScrennshot()
         path = m_SnapFolder + "\\" + imagename.c_str();
     }
     curScreenshotIndex++;
-    if (std::get<5>(cameraNodeList[curindex]) >= TRY_CAPTURE_CNT)
-        std::get<5>(cameraNodeList[curindex]) = 0;
-    std::get<5>(cameraNodeList[curindex])++;
+    //if (std::get<5>(cameraNodeList[curindex]) >= TRY_CAPTURE_CNT)
+    //    std::get<5>(cameraNodeList[curindex]) = 0;
+    //std::get<5>(cameraNodeList[curindex])++;
     _mtx.unlock();
-    QString uuid(std::get<0>(cameraNodeList[curindex]));
     uint64_t starttime = ot();
     bool bEnpireCapture = false;
-    if (std::get<3>(cameraNodeList[curindex]) == -1)
+    if (cameraNodeList[curindex].frequency == -1)
         bEnpireCapture = true;
     else
-        bEnpireCapture = ((starttime - std::get<4>(cameraNodeList[curindex])) >= std::get<3>(cameraNodeList[curindex]) * 1000);
+        bEnpireCapture = ((starttime - cameraNodeList[curindex].timestamp) >= cameraNodeList[curindex].cnt * 1000);
 
-    if (curindex >= cameraNodeList.size() || uuid.isEmpty() || !bEnpireCapture)
+    if (curindex >= cameraNodeList.size() || cameraNodeList[curindex].uuid.isEmpty() || !bEnpireCapture)
     {        
         return;
     }
@@ -286,8 +297,8 @@ void VideoCaptrue::PreviewScrennshot()
     //return;
     if (!threadrun)
         return;
-    long lPlayHandle = ISMS_StartPreview(uuid.toStdString().c_str(), nullptr, enStreamType, CB_StreamCallback, NULL);
-    bool bSuc = lPlayHandle > ISMS_ERR_FAIL;
+    cameraNodeList[curindex].handle = ISMS_StartPreview(cameraNodeList[curindex].uuid.toStdString().c_str(), nullptr, enStreamType, CB_StreamCallback, NULL);
+    bool bSuc = cameraNodeList[curindex].handle > ISMS_ERR_FAIL;
     if (!bSuc)
     {
         int errorcode = ISMS_GetLastError();
@@ -300,10 +311,12 @@ void VideoCaptrue::PreviewScrennshot()
             }
             loginMutex.unlock();
         }
-        if(threadrun && std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
-            Log::instance().p(YLOG_ERROR, "当前线程%d，预览失败 uuid:%s 错误码：%d", QThread::currentThread(), uuid.toStdString().c_str(), ISMS_GetLastError());
+        //if(threadrun && std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
+        Log::instance().p(YLOG_ERROR, "当前线程%d，预览失败 序号:%d uuid:%s 错误码：%d", QThread::currentThread(), curindex, cameraNodeList[curindex].uuid.toStdString().c_str(), ISMS_GetLastError());
         return;
     }
+    //Log::instance().p(YLOG_ERROR, "当前线程%d，预览成功 预览句柄:%d 序号:%d uuid:%s 错误码：%d", QThread::currentThread(), cameraNodeList[curindex].handle, curindex, cameraNodeList[curindex].uuid.toStdString().c_str(), ISMS_GetLastError());
+
     int iRet = -1;
     int sleepnum = 0;
     bool captureres = false;
@@ -311,22 +324,23 @@ void VideoCaptrue::PreviewScrennshot()
     {
         if (!threadrun)
             return;
-        QFile::remove(path);
-        iRet = ISMS_PreviewSnapshot(lPlayHandle, path.toStdString().c_str());
+        std::string  imgpath = m_SnapFolder.toStdString()+"\\"+ std::to_string(curindex + 1) + "_example.jpg";
+        QFile::remove(imgpath.c_str());
+        iRet = ISMS_PreviewSnapshot(cameraNodeList[curindex].handle, imgpath.c_str());
         if (iRet != -1){
             captureres = true;
-            //Log::instance().p(YLOG_ERROR, "当前线程%d，预览句柄：%d，抓图成功 ", QThread::currentThread(), lPlayHandle);
+            //Log::instance().p(YLOG_ERROR, "当前线程%d，预览句柄：%d,序号:%d,path:%s,uuid:%s，抓图成功 ", QThread::currentThread(), (cameraNodeList[curindex]).handle,(curindex+1),imgpath.c_str(), cameraNodeList[curindex].uuid.toStdString().c_str());
             break;
         }
-        if (sleepnum < 100)
+        if (sleepnum < 200)
         {
             sleepnum++;
             Sleep(10);
         }
         else
         {
-            if (std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
-                Log::instance().p(YLOG_ERROR, "当前线程%d，预览句柄：%d，抓图失败 错误码：%d", lPlayHandle, QThread::currentThread(), ISMS_GetLastError());
+            //if (std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
+            Log::instance().p(YLOG_ERROR, "当前线程%d，预览句柄：%d,序号:%d，uuid:%s，抓图失败 错误码：%d", QThread::currentThread(), curindex, cameraNodeList[curindex].handle, cameraNodeList[curindex].uuid.toStdString().c_str(), ISMS_GetLastError());
             break;
         }
         if (!threadrun)
@@ -337,14 +351,15 @@ void VideoCaptrue::PreviewScrennshot()
         QString str = QString("/num=%1").arg(curindex+1);
         std::string stdstr = str.toStdString();
         loginMutex.lock();
-        std::get<4>(cameraNodeList[curindex]) = ot();
-        int index = std::get<2>(cameraNodeList[curindex]);
+        (cameraNodeList[curindex]).timestamp = ot();
+        int index = (cameraNodeList[curindex]).tcpvalue;
         if (index < SOCKET_SIZE)
         {
             int iret = s_http->getData(socketd[index].socked, stdstr, " ");
             if (iret < 0)
             {
-                Log::instance().p(YLOG_ERROR, "tcp消息发送失败,线程id:%d，错误码：%d,index:%d,port:%d, ", QThread::currentThread(), iret, index, socketd[index].port);
+                //if (threadrun && std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
+                 Log::instance().p(YLOG_ERROR, "tcp消息发送失败,线程id:%d，错误码：%d,index:%d,port:%d, ", QThread::currentThread(), iret, index, socketd[index].port);
                 closesocket(socketd[index].socked);
                 s_http->socketInit("127.0.0.1",index, socketd[index]);
                 s_http->getData(socketd[index].socked, stdstr, " ");
@@ -352,14 +367,14 @@ void VideoCaptrue::PreviewScrennshot()
         }
         loginMutex.unlock();
     }
-    iRet = ISMS_StopPreview(lPlayHandle);
+    iRet = ISMS_StopPreview(cameraNodeList[curindex].handle);
     int64_t endtime = ot();
-    if (captureres && testthreadflg)
+    if (captureres&& testthreadflg) // 
     {
         capturemtx.lock();
         capturenum++;
         capturemtx.unlock();
-        Log::instance().p(YLOG_INFO, "抓图成功,预览句柄：%d,当前进程id:%d,图片id:%d ,花费时间：%dms", lPlayHandle, QThread::currentThread(), (curindex + 1), (endtime - starttime));
+        Log::instance().p(YLOG_INFO, "抓图成功,预览句柄：%d,当前进程id:%d,uuid:%s,图片id:%d ,花费时间：%dms", (cameraNodeList[curindex]).handle, QThread::currentThread(), (cameraNodeList[curindex]).uuid.toStdString().c_str(), (curindex + 1), (endtime - starttime));
 
     }
 }

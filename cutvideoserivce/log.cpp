@@ -131,7 +131,6 @@ void Log::p(const int level, const char* format, ...) {
         if (strlen(yinfo) > YLOG_MAXBUF) {
             strcpy(yinfo, "TOO LONG,CAN NOT LOG!");
         }
-        //assert(NULL != this->file);
         if (NULL == this->file)
         {
             lk.unlock();

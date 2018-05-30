@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QDir>
 #include <memory>
+#include "main.h"
 std::unique_ptr<QThreadPool> pthreadpool;
 void exitCutvideoService()
 {
