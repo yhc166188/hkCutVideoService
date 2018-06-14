@@ -1,6 +1,6 @@
 #include "VideoCaptrue.h"
 #include "ISMSSDK.h"
-#include "crash/CrashAPI.h"
+
 #include <QtCore/QtCore>
 #include <QList>
 #include <tuple>
@@ -163,8 +163,8 @@ bool VideoCaptrue::CamerainfoInit()
 bool VideoCaptrue::Logininit()
 {
     Logindestroy();
-    CrashAPI_Init();
-    CrashAPI_SetDumpType(FullDumpType);
+    //CrashAPI_Init();
+    //CrashAPI_SetDumpType(FullDumpType);
     loginstatus = 1;
     int iRet;
     int reslut;
@@ -413,7 +413,5 @@ void VideoCaptrue::Logindestroy()
         ISMS_Logout();
     if (loginstatus >= 2)
         ISMS_Fini();
-    if (loginstatus >= 1)
-        CrashAPI_Uninit();
     loginstatus = 0;
 }

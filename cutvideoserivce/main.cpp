@@ -11,7 +11,90 @@
 #include <QDir>
 #include <memory>
 #include "main.h"
+//#include "crash/CrashAPI.h"
 std::unique_ptr<QThreadPool> pthreadpool;
+#include <stdio.h>
+#include <dbghelp.h>
+#include <stdlib.h>
+#pragma comment(lib, "Dbghelp.lib")
+#include <DbgHelp.h>
+//生产DUMP文件
+int GenerateMiniDump(HANDLE hFile, PEXCEPTION_POINTERS pExceptionPointers, PWCHAR pwAppName)
+{
+    BOOL bOwnDumpFile = FALSE;
+    HANDLE hDumpFile = hFile;
+    MINIDUMP_EXCEPTION_INFORMATION ExpParam;
+
+    typedef BOOL(WINAPI * MiniDumpWriteDumpT)(
+        HANDLE,
+        DWORD,
+        HANDLE,
+        MINIDUMP_TYPE,
+        PMINIDUMP_EXCEPTION_INFORMATION,
+        PMINIDUMP_USER_STREAM_INFORMATION,
+        PMINIDUMP_CALLBACK_INFORMATION
+        );
+
+    MiniDumpWriteDumpT pfnMiniDumpWriteDump = NULL;
+    HMODULE hDbgHelp = LoadLibrary(L"DbgHelp.dll");
+    if (hDbgHelp)
+        pfnMiniDumpWriteDump = (MiniDumpWriteDumpT)GetProcAddress(hDbgHelp, "MiniDumpWriteDump");
+
+    if (pfnMiniDumpWriteDump)
+    {
+        if (hDumpFile == NULL || hDumpFile == INVALID_HANDLE_VALUE)
+        {
+            TCHAR szFileName[MAX_PATH] = { 0 };
+            TCHAR* szVersion = L"v1.0";
+            TCHAR dwBufferSize = MAX_PATH;
+            SYSTEMTIME stLocalTime;
+            GetLocalTime(&stLocalTime);
+            CreateDirectory(szFileName, NULL);
+
+            wsprintf(szFileName, L"%s-%04d%02d%02d-%02d%02d%02d-%ld-%ld.dmp",
+                szVersion,
+                stLocalTime.wYear, stLocalTime.wMonth, stLocalTime.wDay,
+                stLocalTime.wHour, stLocalTime.wMinute, stLocalTime.wSecond,
+                GetCurrentProcessId(), GetCurrentThreadId());
+            // szFileName是全路径文件名，这样可以指定dump文件的保存位置
+            hDumpFile = CreateFile(szFileName, GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_WRITE | FILE_SHARE_READ, 0, CREATE_ALWAYS, 0, 0);
+
+            bOwnDumpFile = TRUE;
+            OutputDebugString(szFileName);
+        }
+
+        if (hDumpFile != INVALID_HANDLE_VALUE)
+        {
+            ExpParam.ThreadId = GetCurrentThreadId();
+            ExpParam.ExceptionPointers = pExceptionPointers;
+            ExpParam.ClientPointers = FALSE;
+
+            pfnMiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(),
+                hDumpFile, MiniDumpWithDataSegs, (pExceptionPointers ? &ExpParam : NULL), NULL, NULL);
+
+            if (bOwnDumpFile)
+                CloseHandle(hDumpFile);
+        }
+    }
+
+    if (hDbgHelp != NULL)
+        FreeLibrary(hDbgHelp);
+
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+
+LONG WINAPI ExceptionFilter(LPEXCEPTION_POINTERS lpExceptionInfo)
+{
+    if (IsDebuggerPresent())
+    {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    return GenerateMiniDump(NULL, lpExceptionInfo, L"test");
+}
+
 void exitCutvideoService()
 {
     VideoCaptrue::setThreadRunFlg(false);
@@ -97,6 +180,10 @@ void initThreadPool()
 }
 int main(int argc, char *argv[])
 {
+    //dump文件功能 
+    ::SetUnhandledExceptionFilter(ExceptionFilter);
+    //CrashAPI_Init();
+    //CrashAPI_SetDumpType(FullDumpType);
     QApplication a(argc, argv);
     cutvideoserivce w; 
     //w.show();
@@ -118,6 +205,7 @@ int main(int argc, char *argv[])
         {
             VideoCaptrue::stopScreenshot();
             pthreadpool->waitForDone(1000);
+            pthreadpool.reset();
             int threadnum = Setting::getInstance()->getSetting()->value("basic/threadnum").toInt();
             QString logName = QString("%1-%02-%03 %04-%05.log").arg(yst.wYear).arg(yst.wMonth, 2, 10, QLatin1Char('0')).arg(yst.wDay, 2, 10, QLatin1Char('0')).arg(yst.wHour, 2, 10, QLatin1Char('0')).arg(yst.wMinute, 2, 10, QLatin1Char('0'));
             Log::instance().initLog(YLOG_OVER, YLOG_INFO, CurPath.toStdString() + "\\logs\\" + logName.toStdString());
@@ -134,7 +222,7 @@ int main(int argc, char *argv[])
         QString path = QDir::tempPath();
         deleteTempImageFile(path, "jpg");
     });
-    DelTempTimer.start(3*60*60*1000);
+    DelTempTimer.start(3*1000);
     initThreadPool();
     return a.exec();
 }
