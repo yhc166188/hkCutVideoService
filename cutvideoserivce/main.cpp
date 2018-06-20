@@ -101,6 +101,7 @@ void exitCutvideoService()
     if(pthreadpool.get())
         pthreadpool->waitForDone(2000);
     VideoCaptrue::stopScreenshot();
+    VideoCaptrue::Logindestroy();
 }
 static void deleteTempImageFile(QString filepath, QString filesuffix)
 {

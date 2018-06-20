@@ -253,12 +253,12 @@ bool VideoCaptrue::CameraInit()
 void VideoCaptrue::PreviewScrennshot()
 {
     volatile int curindex = 0;
-    QString path;
     ISMS_STREAM_TYPE_EN enStreamType = TYPE_MAIN_STREAM;
     auto CB_StreamCallback = [](long lPlayHnadle, ISMS_STREAM_DATA_TYPE_EN enStreamDataType, const char* pDataArray, int iDataLen, void* pUserData) -> void __stdcall {
     
     };
     std::string  imagename;
+    std::string  imgpath;
     _mtx.lock();
     if (testthreadflg)
     {
@@ -266,17 +266,19 @@ void VideoCaptrue::PreviewScrennshot()
             curScreenshotIndex = 0;
         curindex = curScreenshotIndex%cameraNodeList.size();
 
-        imagename = "test\\example" + std::to_string(curScreenshotIndex) + ".jpg";
-        path = m_SnapFolder + "\\" + imagename.c_str();
+        imagename = "example" + std::to_string(curScreenshotIndex) + ".jpg";
+        imgpath = m_SnapFolder.toStdString() + "\\" + imagename.c_str();
     }
     else
     {
         if (curScreenshotIndex >= cameraNodeList.size())
             curScreenshotIndex = 0;
         curindex = curScreenshotIndex;
-        imagename = std::to_string(curindex + 1) + "\\example.jpg";
-        path = m_SnapFolder + "\\" + imagename.c_str();
+        //imagename = std::to_string(curindex + 1) + "\\example.jpg";
+        //imgpath = m_SnapFolder + "\\" + imagename.c_str();
+        imgpath = m_SnapFolder.toStdString() + "\\" + std::to_string(curindex + 1) + "_example.jpg";
     }
+    
     curScreenshotIndex++;
     //if (std::get<5>(cameraNodeList[curindex]) >= TRY_CAPTURE_CNT)
     //    std::get<5>(cameraNodeList[curindex]) = 0;
@@ -287,7 +289,7 @@ void VideoCaptrue::PreviewScrennshot()
     if (cameraNodeList[curindex].frequency == -1)
         bEnpireCapture = true;
     else
-        bEnpireCapture = ((starttime - cameraNodeList[curindex].timestamp) >= cameraNodeList[curindex].cnt * 1000);
+        bEnpireCapture = ((starttime - cameraNodeList[curindex].timestamp) >= cameraNodeList[curindex].frequency * 1000);
 
     if (curindex >= cameraNodeList.size() || cameraNodeList[curindex].uuid.isEmpty() || !bEnpireCapture)
     {        
@@ -325,12 +327,11 @@ void VideoCaptrue::PreviewScrennshot()
     {
         if (!threadrun)
             return;
-        std::string  imgpath = m_SnapFolder.toStdString()+"\\"+ std::to_string(curindex + 1) + "_example.jpg";
         QFile::remove(imgpath.c_str());
         iRet = ISMS_PreviewSnapshot(cameraNodeList[curindex].handle, imgpath.c_str());
         if (iRet != -1){
             captureres = true;
-            //Log::instance().p(YLOG_ERROR, "当前线程%d，预览句柄：%d,序号:%d,path:%s,uuid:%s，抓图成功 ", QThread::currentThread(), (cameraNodeList[curindex]).handle,(curindex+1),imgpath.c_str(), cameraNodeList[curindex].uuid.toStdString().c_str());
+            //Log::instance().p(YLOG_INFO, "当前线程%d，预览句柄：%d,序号:%d,path:%s,uuid:%s，抓图成功 ", QThread::currentThread(), (cameraNodeList[curindex]).handle,(curindex+1),imgpath.c_str(), cameraNodeList[curindex].uuid.toStdString().c_str());
             break;
         }
         if (sleepnum < 200)
@@ -341,7 +342,7 @@ void VideoCaptrue::PreviewScrennshot()
         else
         {
             //if (std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
-            Log::instance().p(YLOG_ERROR, "当前线程%d，预览句柄：%d,序号:%d，uuid:%s，抓图失败 错误码：%d", QThread::currentThread(), curindex, cameraNodeList[curindex].handle, cameraNodeList[curindex].uuid.toStdString().c_str(), ISMS_GetLastError());
+            Log::instance().p(YLOG_ERROR, "当前线程%d，预览句柄：%d,序号:%d，uuid:%s，抓图失败 错误码：%d", QThread::currentThread(),  cameraNodeList[curindex].handle, (curindex+1), cameraNodeList[curindex].uuid.toStdString().c_str(), ISMS_GetLastError());
             break;
         }
         if (!threadrun)
