@@ -195,8 +195,9 @@ int main(int argc, char *argv[])
     QString logName = QString("%1-%02-%03 %04-%05.log").arg(yst.wYear).arg(yst.wMonth, 2, 10, QLatin1Char('0')).arg(yst.wDay, 2, 10, QLatin1Char('0')).arg(yst.wHour, 2, 10, QLatin1Char('0')).arg(yst.wMinute, 2, 10, QLatin1Char('0'));
     Log::instance().initLog(YLOG_OVER, YLOG_INFO, CurPath.toStdString() +"\\logs\\" + logName.toStdString());
     VideoCaptrue::Logininit();
+    VideoCaptrue::CameraInit();
     VideoCaptrue::CamerainfoInit();
-
+    
     QTimer Timer;
     QObject::connect(&Timer, &QTimer::timeout, [=] {
         SYSTEMTIME yst;
@@ -211,7 +212,9 @@ int main(int argc, char *argv[])
             Log::instance().initLog(YLOG_OVER, YLOG_INFO, CurPath.toStdString() + "\\logs\\" + logName.toStdString());
             deleteExceedWeeklog(CurPath + "\\logs\\", "log");
             Setting::getInstance()->resetSetting();
-            VideoCaptrue::CamerainfoInit();
+            VideoCaptrue::Logininit();
+            VideoCaptrue::CameraInit();
+            VideoCaptrue::CamerainfoInit();           
             initThreadPool();
         }   
     });

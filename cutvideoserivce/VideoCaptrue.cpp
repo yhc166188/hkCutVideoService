@@ -213,12 +213,13 @@ bool VideoCaptrue::CameraInit()
         int iRet = ISMS_GetCameraInfo(&stReq, &stRsp, pCameraArray);
         if (iRet != ISMS_ERR_NOERROR)
         {
-            Log::instance().p(YLOG_ERROR, "全量获取监控点信息出错!，错误码:%d", ISMS_GetLastError());
-            delete[] pCameraArray;
-            return false;
+            Log::instance().p(YLOG_ERROR, "获取监控点信息出错!，错误码:%d", ISMS_GetLastError());
+            break;
         }
         if (0 == stRsp.iRealRows)
+        {
             break;
+        }
         if (1 == iPage)
         {
             i64Time = stRsp.iUpdateTime;
@@ -230,19 +231,19 @@ bool VideoCaptrue::CameraInit()
                 i64Time = stRsp.iUpdateTime;
             }
         }
-/*        for (int i = 0; i < stRsp.iRealRows; ++i)
+       for (int i = 0; i < stRsp.iRealRows; ++i)
         {
-            int size = camerainfo.size();
-            for (int j = 0; j < size; ++j)
-            {
-                if (std::get<1>(camerainfo[j]) == pCameraArray[i].szCameraName)
-                {
-                    std::get<0>(camerainfo[j]) = pCameraArray[i].szCameraUuid;
-                    Log::instance().p(YLOG_INFO, "匹配监控点：%s,uuid:%s", pCameraArray[i].szCameraName, pCameraArray[i].szCameraUuid);
-                }                    
-            }
-            Log::instance().p(YLOG_INFO, "序号：%d监控点：%s,uuid:%s",i, pCameraArray[i].szCameraName, pCameraArray[i].szCameraUuid);
-        }    */   
+            //int size = camerainfo.size();
+            //for (int j = 0; j < size; ++j)
+            //{
+            //    if (std::get<1>(camerainfo[j]) == pCameraArray[i].szCameraName)
+            //    {
+            //        std::get<0>(camerainfo[j]) = pCameraArray[i].szCameraUuid;
+            //        Log::instance().p(YLOG_INFO, "匹配监控点：%s,uuid:%s", pCameraArray[i].szCameraName, pCameraArray[i].szCameraUuid);
+            //    }                    
+            //}
+            Log::instance().p(YLOG_INFO, "平台监控点 序号：%d,名称：%s,uuid:%s",i, pCameraArray[i].szCameraName, pCameraArray[i].szCameraUuid);
+        }       
         ++iPage;
     }
     delete[] pCameraArray;
