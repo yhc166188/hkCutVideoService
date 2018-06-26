@@ -280,9 +280,6 @@ void VideoCaptrue::PreviewScrennshot()
     }
     
     curScreenshotIndex++;
-    //if (std::get<5>(cameraNodeList[curindex]) >= TRY_CAPTURE_CNT)
-    //    std::get<5>(cameraNodeList[curindex]) = 0;
-    //std::get<5>(cameraNodeList[curindex])++;
     _mtx.unlock();
     uint64_t starttime = ot();
     bool bEnpireCapture = false;
@@ -341,7 +338,6 @@ void VideoCaptrue::PreviewScrennshot()
         }
         else
         {
-            //if (std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
             Log::instance().p(YLOG_ERROR, "µ±Ç°Ïß³Ì%d£¬Ô¤ÀÀ¾ä±ú£º%d,ÐòºÅ:%d£¬uuid:%s£¬×¥Í¼Ê§°Ü ´íÎóÂë£º%d", QThread::currentThread(),  cameraNodeList[curindex].handle, (curindex+1), cameraNodeList[curindex].uuid.toStdString().c_str(), ISMS_GetLastError());
             break;
         }
@@ -360,7 +356,6 @@ void VideoCaptrue::PreviewScrennshot()
             int iret = s_http->getData(socketd[index].socked, stdstr, " ");
             if (iret < 0)
             {
-                //if (threadrun && std::get<5>(cameraNodeList[curindex]) == TRY_CAPTURE_CNT)
                  Log::instance().p(YLOG_ERROR, "tcpÏûÏ¢·¢ËÍÊ§°Ü,Ïß³Ìid:%d£¬´íÎóÂë£º%d,index:%d,port:%d, ", QThread::currentThread(), iret, index, socketd[index].port);
                 closesocket(socketd[index].socked);
                 s_http->socketInit("127.0.0.1",index, socketd[index]);
